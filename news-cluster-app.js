@@ -1,5 +1,5 @@
 // News Cluster App - Standalone Version
-// Version 1.0 - For Simvoly via Google Drive
+// Version 1.9 - With Chart Generation Support
 
 (function(){
   // Wait for DOM to be ready
@@ -11,7 +11,7 @@
 
   function initApp(){
     const API_BASE = "https://news-cluster-7u1x.onrender.com";
-    const ANALYSIS_API_BASE = "https://news-analysis-la.onrender.com"; 
+    const ANALYSIS_API_BASE = "https://news-analysis-la.onrender.com";
     const DEFAULT_WINDOW_MINUTES = 180;
     const DEFAULT_MIN_COUNT_NOW = 2;
 
@@ -98,6 +98,18 @@
             <div class="nc-label">Additional Prompt (Optional)</div>
             <textarea id="ncAdditionalPrompt" class="nc-textarea" placeholder="e.g., business (no more than 2 words)"></textarea>
             <div class="nc-small">Brief guidance for the AI analysis</div>
+          </div>
+
+          <div class="nc-form-group">
+            <div class="nc-label">Chart Generation (Optional)</div>
+            <textarea id="ncChartData" class="nc-textarea" placeholder="Paste CSV or tab-separated data here&#10;Example:&#10;Month,Sales&#10;January,1000&#10;February,1500&#10;March,1200"></textarea>
+            <div class="nc-small">Claude will auto-detect chart type (line, bar, pie, etc.)</div>
+          </div>
+
+          <div class="nc-form-group">
+            <div class="nc-label">Chart Explanation (Optional)</div>
+            <input id="ncChartExplanation" class="nc-input" placeholder="e.g., Monthly sales data for Q1 2024" />
+            <div class="nc-small">Brief context to help Claude understand the data</div>
           </div>
 
           <div class="nc-form-group">
@@ -253,6 +265,8 @@
       el("ncControlSite").value = "fraserinstitute.org";
       el("ncControlArticle").value = "";
       el("ncAdditionalPrompt").value = "";
+      el("ncChartData").value = "";
+      el("ncChartExplanation").value = "";
       el("ncAiTool").value = "claude";
     }
 
@@ -268,6 +282,8 @@
       const controlSite = el("ncControlSite").value.trim();
       const controlArticle = el("ncControlArticle").value.trim();
       const additionalPrompt = el("ncAdditionalPrompt").value.trim();
+      const chartData = el("ncChartData").value.trim();
+      const chartExplanation = el("ncChartExplanation").value.trim();
       const aiTool = el("ncAiTool").value;
 
       if (!controlSite){
@@ -281,7 +297,11 @@
       cancelBtn.disabled = true;
       writeBtn.innerHTML = '<span class="nc-loading">⟳</span> Generating...';
 
-      el("ncAnalysisResult").innerHTML = `<div class="nc-empty">🔄 Generating deep analysis... This may take 30-60 seconds.</div>`;
+      const statusMsg = chartData 
+        ? `🔄 Generating deep analysis with chart... This may take 60-90 seconds.`
+        : `🔄 Generating deep analysis... This may take 30-60 seconds.`;
+      
+      el("ncAnalysisResult").innerHTML = `<div class="nc-empty">${statusMsg}</div>`;
 
       try{
         const storyArticlesUrl = `${API_BASE}/api/projects/${encodeURIComponent(lastPayload.project_id)}/story_articles`;
@@ -304,6 +324,8 @@
           control_site: controlSite,
           control_article_url: controlArticle,
           additional_prompt: additionalPrompt,
+          chart_data: chartData || null,
+          chart_explanation: chartExplanation || null,
           ai_tool_choice: aiTool
         });
 
@@ -313,9 +335,17 @@
 
         const analysis = analysisResp.analysis;
 
+        // The body already contains chart HTML if chart was generated
         const bodyHtml = analysis.analysis_body
           .split('\n\n')
-          .map(p => `<p>${p.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')}</p>`)
+          .map(p => {
+            // Skip paragraphs that are chart containers (already have HTML)
+            if (p.includes('<div class="chart-container"')) {
+              return p;
+            }
+            // Convert markdown links to HTML for regular paragraphs
+            return `<p>${p.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')}</p>`;
+          })
           .join('');
 
         el("ncAnalysisResult").innerHTML = `
@@ -324,6 +354,11 @@
             <div class="nc-analysis-title">${escapeHtml(analysis.analysis_title)}</div>
             <div class="nc-analysis-summary">${escapeHtml(analysis.analysis_summary)}</div>
             <div class="nc-analysis-body">${bodyHtml}</div>
+            ${analysis.chart_image_url && !analysis.analysis_body.includes('<div class="chart-container"') ? `
+              <div style="margin-top: 20px; text-align: center;">
+                <img src="${escapeHtml(analysis.chart_image_url)}" alt="Data visualization" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+              </div>
+            ` : ''}
           </div>
         `;
 
@@ -417,6 +452,6 @@
       closeAnalysisModal();
     });
 
-    console.log("✓ News Cluster App initialized successfully!");
+    console.log("✓ News Cluster App V1.9 initialized successfully!");
   }
 })();
